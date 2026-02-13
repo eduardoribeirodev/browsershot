@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace EduardoRibeiroDev\Browsershot\Services;
 
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Storage;

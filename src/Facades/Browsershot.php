@@ -2,7 +2,7 @@
 
 namespace EduardoRibeiroDev\Browsershot\Facades;
 
-use App\Services\BrowsershotService;
+use EduardoRibeiroDev\Browsershot\Services\BrowsershotService;
 use Illuminate\Support\Facades\Facade;
 
 /**
