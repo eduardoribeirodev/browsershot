@@ -1,0 +1,50 @@
+{
+    "name": "eduardoribeirodev/browsershot",
+    "description": "This is my package browsershot",
+    "keywords": [
+        "eduardoribeirodev",
+        "browsershot"
+    ],
+    "homepage": "https://github.com/eduardoribeirodev/browsershot",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Eduardo Ribeiro",
+            "email": "eduribeiro.films@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "spatie/browsershot": "^5.2"
+    },
+    "require-dev": {
+        "pestphp/pest": "^4.0",
+        "laravel/pint": "^1.0",
+        "spatie/ray": "^1.28"
+    },
+    "autoload": {
+        "psr-4": {
+            "EduardoRibeiroDev\\Browsershot\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "EduardoRibeiroDev\\Browsershot\\Tests\\": "tests"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+            "test-coverage": "vendor/bin/pest --coverage",
+        "format": "vendor/bin/pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
