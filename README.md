@@ -45,7 +45,7 @@ BROWSERSHOT_CHROME_PATH=/path/to/chrome // Custom path
 ### Generate PDF from Blade View
 
 ```php
-use Browsershot;
+use EduardoRibeiroDev\Browsershot\Facades\Browsershot;
 
 $pdf = Browsershot::make(view('invoice', $data))
     ->format('pdf')
@@ -257,7 +257,7 @@ $service = Browsershot::make($view)
 ### Complete Invoice PDF Generation
 
 ```php
-use Browsershot;
+use EduardoRibeiroDev\Browsershot\Facades\Browsershot;
 
 public function generateInvoice(Invoice $invoice)
 {
@@ -397,7 +397,7 @@ This ensures proper rendering without requiring you to provide complete HTML eve
 namespace App\Http\Controllers;
 
 use App\Models\Invoice;
-use Browsershot;
+use EduardoRibeiroDev\Browsershot\Facades\Browsershot;
 
 class InvoicePdfController extends Controller
 {
@@ -423,7 +423,7 @@ class InvoicePdfController extends Controller
 ## Testing
 
 ```php
-use Browsershot;
+use EduardoRibeiroDev\Browsershot\Facades\Browsershot;
 use Illuminate\Support\Facades\Storage;
 
 test('can generate pdf from view', function () {
