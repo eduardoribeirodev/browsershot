@@ -2,6 +2,7 @@
 
 namespace EduardoRibeiroDev\Browsershot\Facades;
 
+use App\Services\BrowsershotService;
 use Illuminate\Support\Facades\Facade;
 
 /**
@@ -21,6 +22,6 @@ class Browsershot extends Facade
 {
     protected static function getFacadeAccessor()
     {
-        return 'browsershot_service';
+        return BrowsershotService::class;
     }
 }
