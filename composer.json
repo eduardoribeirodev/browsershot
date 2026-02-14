@@ -15,12 +15,13 @@
         }
     ],
     "require": {
-        "php": "^8.4",
+        "php": "^8.2",
         "spatie/browsershot": "^5.2"
     },
     "require-dev": {
-        "pestphp/pest": "^4.0",
+        "laravel/laravel": "^12.11",
         "laravel/pint": "^1.0",
+        "pestphp/pest": "^4.0",
         "spatie/ray": "^1.28"
     },
     "autoload": {

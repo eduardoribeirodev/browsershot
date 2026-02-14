@@ -6,7 +6,7 @@ use EduardoRibeiroDev\Browsershot\Services\BrowsershotService;
 use Illuminate\Support\Facades\Facade;
 
 /**
- *    @method static self make(View|string $content)
+ *    @method static self make(Illuminate\Contracts\View\View|string $content)
  *    @method static self windowSize(int $width, int $height)
  *    @method static self proportion(string $proportion, int $baseWidth = 780)
  *    @method static self scale(int $scale)

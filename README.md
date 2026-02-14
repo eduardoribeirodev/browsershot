@@ -19,7 +19,11 @@ composer require eduardoribeirodev/browsershot
 
 ### Prerequisites
 
-This package requires Puppeteer/Chromium to be installed. Follow [Spatie's Browsershot installation guide](https://spatie.be/docs/browsershot/v3/requirements) for your environment.
+This package requires Puppeteer/Chromium to be installed. Follow [Spatie's Browsershot installation guide](https://spatie.be/docs/browsershot/v4/requirements) for your environment.
+
+```bash
+npm install puppeteer
+```
 
 ## Configuration
 

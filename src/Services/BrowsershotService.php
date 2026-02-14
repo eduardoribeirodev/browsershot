@@ -103,8 +103,12 @@ HTML;
     /**
      * Define o tamanho baseado em proporção (ex: '16:9')
      */
-    public function proportion(string $proportion, int $baseWidth = 780): self
+    public function proportion(string $proportion, ?int $baseWidth = null): self
     {
+        if (!$baseWidth) {
+            $baseWidth = $this->windowSize[0];
+        }
+        
         $parts = explode(':', $proportion);
         $minDim = min($parts);
         
