@@ -82,7 +82,7 @@ Creates a new instance of the service.
 
 ```php
 // From Blade view
-Browsershot::make(view('documents.invoice', $data));
+Browsershot::make('documents.invoice', $data);
 
 // From HTML string
 Browsershot::make('<div>Content here</div>');
@@ -265,11 +265,11 @@ use EduardoRibeiroDev\Browsershot\Facades\Browsershot;
 
 public function generateInvoice(Invoice $invoice)
 {
-    return Browsershot::make(view('invoices.template', [
+    return Browsershot::make('invoices.template', [
         'invoice' => $invoice,
         'customer' => $invoice->customer,
         'items' => $invoice->items,
-    ]))
+    ])
         ->proportion('21:29.7') // A4 paper ratio
         ->format('pdf')
         ->download("invoice-{$invoice->number}.pdf");
@@ -334,7 +334,7 @@ use Illuminate\Support\Facades\Storage;
 public function generateMonthlyReports(Collection $departments)
 {
     $departments->each(function ($department) {
-        Browsershot::make(view('reports.monthly', compact('department')))
+        Browsershot::make('reports.monthly', compact('department'))
             ->proportion('16:9')
             ->format('pdf')
             ->save("reports/{$department->slug}-" . now()->format('Y-m') . ".pdf");
@@ -407,14 +407,14 @@ class InvoicePdfController extends Controller
 {
     public function show(Invoice $invoice)
     {
-        return Browsershot::make(view('invoices.pdf', compact('invoice')))
+        return Browsershot::make('invoices.pdf', compact('invoice'))
             ->format('pdf')
             ->download("invoice-{$invoice->number}.pdf");
     }
 
     public function preview(Invoice $invoice)
     {
-        $base64 = Browsershot::make(view('invoices.pdf', compact('invoice')))
+        $base64 = Browsershot::make('invoices.pdf', compact('invoice'))
             ->format('png')
             ->windowSize(800, 1131) // A4 preview
             ->toBase64();
@@ -433,7 +433,7 @@ use Illuminate\Support\Facades\Storage;
 test('can generate pdf from view', function () {
     Storage::fake('local');
 
-    $result = Browsershot::make(view('test-view'))
+    $result = Browsershot::make('test-view')
         ->format('pdf')
         ->save('test.pdf');
 

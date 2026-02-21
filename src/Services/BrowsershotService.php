@@ -17,16 +17,24 @@ class BrowsershotService
 
     /**
      * Cria uma nova instância do serviço
+     * @param View|string $content Pode ser uma view, string de nome de view, HTML bruto ou URL
      */
-    public static function make(View|string $content): self
+    public static function make(View|string $content, array $data = []): self
     {
-        $instance = (new static);
-        
+        $html = null;
+
         if ($content instanceof View) {
-            $instance->html($content->render());
+            $html = $content->render();
+        } else if (view()->exists($content)) {
+            $html = view($content, $data)->render();
+        } else if (filter_var($content, FILTER_VALIDATE_URL)) {
+            $html = file_get_contents($content);
         } else {
-            $instance->html($content);
+            $html = $content;
         }
+
+        $instance = (new static);
+        $instance->html($html);
 
         return $instance;
     }
@@ -46,7 +54,8 @@ class BrowsershotService
     private function getWrappedHtml(): string
     {
         $html = trim($this->html);
-        
+        $lang = str_replace('_', '-', config('app.locale'));
+
         // Verifica se já possui tag <html>
         if (preg_match('/<html[\s>]/i', $html)) {
             return $html;
@@ -58,14 +67,14 @@ class BrowsershotService
 
         // Se já tem head e body, apenas envolve em <html>
         if ($hasHead && $hasBody) {
-            return "<!DOCTYPE html>\n<html lang=\"pt-BR\">\n{$html}\n</html>";
+            return "<!DOCTYPE html>\n<html lang=\"{$lang}\">\n{$html}\n</html>";
         }
 
         // Se tem apenas body, adiciona head completo
         if ($hasBody) {
             return <<<HTML
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="{$lang}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -75,16 +84,16 @@ class BrowsershotService
 HTML;
         }
 
-        $height = $this->getWindowSize()[1];
+        [$width, $height] = $this->getWindowSize();
 
         // Se não tem nenhuma estrutura HTML, cria completa
         return <<<HTML
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="{$lang}">
 <head>
     <meta charset="UTF-8">
 </head>
-<body style="height: {$height}px;">
+<body style="width: {$width}px; height: {$height}px;">
 {$html}
 </body>
 </html>
@@ -103,18 +112,14 @@ HTML;
     /**
      * Define o tamanho baseado em proporção (ex: '16:9')
      */
-    public function proportion(string $proportion, ?int $baseWidth = null): self
+    public function proportion(int $widthRatio, int $heightRatio): self
     {
-        if (!$baseWidth) {
-            $baseWidth = $this->windowSize[0];
-        }
-        
-        $parts = explode(':', $proportion);
-        $minDim = min($parts);
-        
-        $width = intval(($parts[0] / $minDim) * $baseWidth);
-        $height = intval(($parts[1] / $minDim) * $baseWidth);
-        
+        $baseWidth = $this->windowSize[0];
+        $minDim = min($widthRatio, $heightRatio);
+
+        $width = intval(($widthRatio / $minDim) * $baseWidth);
+        $height = intval(($heightRatio / $minDim) * $baseWidth);
+
         return $this->windowSize($width, $height);
     }
 
@@ -151,7 +156,7 @@ HTML;
     public function generate(): string
     {
         $browsershot = Browsershot::html($this->getWrappedHtml())
-            ->windowSize($this->windowSize[0], $this->windowSize[1])
+            ->windowSize(...$this->windowSize)
             ->setChromePath(config('services.browsershot.chrome_path'))
             ->deviceScaleFactor($this->deviceScaleFactor);
 
@@ -189,10 +194,11 @@ HTML;
     /**
      * Salva o arquivo no storage
      */
-    public function save(string $path): bool
+    public function save(string $path, ?string $disk = null): bool
     {
+        $driver = $disk ?? config('filesystems.default', 'local');
         $content = $this->generate();
-        return Storage::put($path, $content);
+        return Storage::disk($driver)->put($path, $content);
     }
 
     /**
