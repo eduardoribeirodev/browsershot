@@ -6,17 +6,7 @@ use EduardoRibeiroDev\Browsershot\Services\BrowsershotService;
 use Illuminate\Support\Facades\Facade;
 
 /**
- *    @method static self make(Illuminate\Contracts\View\View|string $content, array $data = [])
- *    @method static self windowSize(int $width, int $height)
- *    @method static self proportion(string $proportion, ?int $baseWidth = null)
- *    @method static self scale(int $scale)
- *    @method static self format(string $format)
- *    @method static self noSandbox(bool $noSandbox = true)
- *    @method static string generate()
- *    @method static Symfony\Component\HttpFoundation\StreamedResponse download(?string $fileName = null)
- *    @method static bool save(string $path, ?string $disk = null)
- *    @method static string toBase64()
- *    @method static array getWindowSize()
+ *    @method static EduardoRibeiroDev\Browsershot\Services\BrowsershotService make(Illuminate\Contracts\View\View|string $content, array $data = [])
  */
 class Browsershot extends Facade
 {
