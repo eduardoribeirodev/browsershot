@@ -4,8 +4,9 @@ A fluent Laravel wrapper for [Spatie's Browsershot](https://github.com/spatie/br
 
 ## Features
 
-- 🎨 Generate PDFs and screenshots from Blade views or HTML strings
-- 📐 Flexible window sizing with aspect ratio support
+- 🎨 Generate PDFs and screenshots from Blade views, HTML strings, or URLs
+- 📐 Flexible sizing with unit support (px, mm, cm, in) and aspect ratio helpers
+- 📄 Named paper format shortcuts (A0–A6, Letter, Legal, Tabloid, Ledger)
 - 🔧 Fluent, chainable API
 - 💾 Multiple output options (download, save to storage, base64)
 - 🚀 Automatic HTML structure wrapping
@@ -38,10 +39,9 @@ Add the Chrome path to your `config/services.php`:
 Set the path in your `.env` file:
 
 ```env
-BROWSERSHOT_CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" // For Mac
-BROWSERSHOT_CHROME_PATH="/usr/bin/chromium-browser" // For Linux
-BROWSERSHOT_CHROME_PATH="C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" // For Windows
-BROWSERSHOT_CHROME_PATH=/path/to/chrome // Custom path
+BROWSERSHOT_CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" # Mac
+BROWSERSHOT_CHROME_PATH="/usr/bin/chromium-browser"                                     # Linux
+BROWSERSHOT_CHROME_PATH="C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"  # Windows
 ```
 
 ## Basic Usage
@@ -52,7 +52,7 @@ BROWSERSHOT_CHROME_PATH=/path/to/chrome // Custom path
 use EduardoRibeiroDev\Browsershot\Facades\Browsershot;
 
 $pdf = Browsershot::make(view('invoice', $data))
-    ->format('pdf')
+    ->pdf()
     ->generate();
 ```
 
@@ -60,15 +60,16 @@ $pdf = Browsershot::make(view('invoice', $data))
 
 ```php
 $screenshot = Browsershot::make('<h1>Hello World</h1>')
-    ->format('png')
+    ->png()
     ->generate();
 ```
 
-### Download PDF in Controller
+### Download PDF in a Controller
 
 ```php
-Browsershot::make(view('report'))
-    ->format('pdf')
+return Browsershot::make(view('report'))
+    ->a4()
+    ->pdf()
     ->download('monthly-report.pdf');
 ```
 
@@ -76,202 +77,304 @@ Browsershot::make(view('report'))
 
 ### Initialization
 
-#### `make(View|string $content)`
+#### `make(View|string $content, array $data = []): self`
 
-Creates a new instance of the service.
+Creates a new instance. Accepts a Blade `View` object, a view name string, a URL, or a raw HTML string.
 
 ```php
-// From Blade view
+// From a View object
+Browsershot::make(view('documents.invoice', $data));
+
+// From a view name (with optional data)
 Browsershot::make('documents.invoice', $data);
 
-// From HTML string
+// From a URL
+Browsershot::make('https://example.com');
+
+// From a raw HTML string
 Browsershot::make('<div>Content here</div>');
-
-// From HTML file
-Browsershot::make(file_get_contents('template.html'));
 ```
 
-### Window Configuration
+---
 
-#### `windowSize(int $width, int $height)`
+### Size & Viewport
 
-Sets the viewport dimensions in pixels.
+#### `size(int $width, int $height, string $unit = 'px'): self`
+
+Sets the viewport/paper dimensions. Supported units: `px`, `mm`, `cm`, `in`.
 
 ```php
-Browsershot::make($view)
-    ->windowSize(1920, 1080)
-    ->generate();
+Browsershot::make($view)->size(1920, 1080)->generate();
+Browsershot::make($view)->size(210, 297, 'mm')->generate(); // A4
 ```
 
-#### `proportion(string $proportion, int $baseWidth = 780)`
+#### `center(int $x, int $y): self`
 
-Sets dimensions based on aspect ratio.
+Sets the clip origin. Must be combined with `size()`.
 
 ```php
-// 16:9 aspect ratio with 780px base width
-Browsershot::make($view)
-    ->proportion('16:9')
-    ->generate();
-
-// Custom base width
-Browsershot::make($view)
-    ->proportion('4:3', 1024)
-    ->generate();
+Browsershot::make($view)->center(100, 50)->size(800, 600)->generate();
 ```
 
-**Common proportions:**
-- `16:9` - Widescreen (default base: 1388x780px)
-- `4:3` - Standard (default base: 1040x780px)
-- `1:1` - Square (default base: 780x780px)
-- `21:9` - Ultrawide (default base: 1820x780px)
+#### `clip(int $x, int $y, int $width, int $height): self`
 
-#### `scale(int $scale)`
+Shorthand for setting both `center` and `size` at once.
+
+```php
+Browsershot::make($view)->clip(0, 0, 1200, 800)->generate();
+```
+
+#### `scale(float $scale): self`
 
 Sets the device scale factor for high-resolution output.
 
 ```php
-// 2x resolution (Retina)
+// 2× resolution (Retina)
+Browsershot::make($view)->scale(2)->generate();
+```
+
+#### `aspectRatio(string|float $ratio): self`
+
+Adjusts the current size to match a given aspect ratio. Must call `size()` first.
+
+```php
 Browsershot::make($view)
-    ->scale(2)
+    ->size(1920, 1080)
+    ->aspectRatio('16:9')   // string form
+    ->generate();
+
+Browsershot::make($view)
+    ->size(1200, 900)
+    ->aspectRatio(4 / 3)    // float form
     ->generate();
 ```
+
+---
+
+### Paper Format Shortcuts
+
+These methods set the viewport to a standard paper size (in mm). An optional `$scale` multiplier can be passed to `format()`.
+
+#### `format(string $format, float $scale = 1): self`
+
+```php
+Browsershot::make($view)->format('A4')->generate();
+Browsershot::make($view)->format('Letter', 2)->generate(); // 2× scale
+```
+
+**Named shortcuts** (equivalent to calling `format()` with the matching name):
+
+| Method | Dimensions (mm) |
+|---|---|
+| `a0()` | 841 × 1189 |
+| `a1()` | 594 × 841 |
+| `a2()` | 420 × 594 |
+| `a3()` | 297 × 420 |
+| `a4()` | 210 × 297 |
+| `a5()` | 148 × 210 |
+| `a6()` | 105 × 148 |
+| `letter()` | 216 × 279 |
+| `legal()` | 216 × 356 |
+| `tabloid()` | 279 × 432 |
+| `ledger()` | 432 × 279 |
+
+```php
+Browsershot::make($view)->a4()->pdf()->download('doc.pdf');
+Browsershot::make($view)->letter()->landscape()->pdf()->generate();
+```
+
+---
+
+### Orientation
+
+#### `landscape(bool $landscape = true): self`
+
+#### `portrait(): self`
+
+```php
+Browsershot::make($view)->a4()->landscape()->pdf()->generate();
+Browsershot::make($view)->a4()->portrait()->pdf()->generate();
+```
+
+---
+
+### Margins
+
+#### `margin(int $size, string $unit = 'mm'): self`
+
+Applies a uniform margin to all four sides.
+
+```php
+Browsershot::make($view)->a4()->margin(10)->pdf()->generate();
+```
+
+#### `margins(int $top, int $right, int $bottom, int $left, string $unit = 'mm'): self`
+
+Sets each margin individually in one call.
+
+```php
+Browsershot::make($view)->margins(10, 15, 10, 15)->pdf()->generate();
+```
+
+#### `marginTop / marginRight / marginBottom / marginLeft`
+
+Fluent per-side setters.
+
+```php
+Browsershot::make($view)
+    ->marginTop(20)
+    ->marginBottom(20)
+    ->pdf()
+    ->generate();
+```
+
+---
 
 ### Output Format
 
-#### `format(string $format)`
+#### `pdf(): self`
+#### `png(): self`
+#### `jpeg(): self`
+#### `webp(): self`
+#### `extension(string $extension): self`
 
-Sets the output format.
-
-```php
-// PDF
-Browsershot::make($view)->format('pdf');
-
-// PNG (default)
-Browsershot::make($view)->format('png');
-
-// JPEG
-Browsershot::make($view)->format('jpg');
-```
-
-**Supported formats:** `png`, `jpg`, `jpeg`, `pdf`, `webp`
-
-### Sandbox Configuration
-
-#### `noSandbox(bool $noSandbox = true)`
-
-Enables or disables Chrome's sandbox mode.
+Sets the output file format. The named helpers are shorthands for `extension()`.
 
 ```php
-// Disable sandbox (useful for Docker/CI environments)
-Browsershot::make($view)
-    ->noSandbox()
-    ->generate();
+Browsershot::make($view)->pdf()->generate();
+Browsershot::make($view)->png()->generate();
+Browsershot::make($view)->jpeg()->generate();
+Browsershot::make($view)->webp()->generate();
+Browsershot::make($view)->extension('png')->generate(); // equivalent
+```
 
-// Enable sandbox
+---
+
+### PDF-Specific Options
+
+#### `pages(...$pages): self`
+
+Selects specific pages (or page ranges) to include in the PDF output.
+
+```php
+// Single pages
+Browsershot::make($view)->pdf()->pages(1, 3, 5)->generate();
+
+// Ranges (passed as arrays)
+Browsershot::make($view)->pdf()->pages([1, 3], [5, 7])->generate();
+
+// Mixed
+Browsershot::make($view)->pdf()->pages(1, [3, 5], 8)->generate();
+```
+
+---
+
+### Sandbox
+
+#### `noSandbox(bool $noSandbox = true): self`
+
+Disables Chrome's sandbox — required in most Docker/CI environments.
+
+```php
+Browsershot::make($view)->noSandbox()->generate();
+
+// Re-enable (not usually needed)
+Browsershot::make($view)->noSandbox(false)->generate();
+```
+
+---
+
+### Advanced Customization
+
+#### `modifyBrowsershotUsing(Closure $callback): self`
+
+Provides direct access to the underlying `Spatie\Browsershot\Browsershot` instance for options not exposed by this wrapper.
+
+```php
+use Spatie\Browsershot\Browsershot;
+
 Browsershot::make($view)
-    ->noSandbox(false)
+    ->modifyBrowsershotUsing(function (Browsershot $browsershot) {
+        $browsershot->waitUntilNetworkIdle()->timeout(60);
+    })
+    ->pdf()
     ->generate();
 ```
+
+---
 
 ### Output Methods
 
 #### `generate(): string`
 
-Generates and returns the content as a binary string.
+Returns the raw binary content.
 
 ```php
-$content = Browsershot::make($view)
-    ->format('pdf')
-    ->generate();
-
-// Store manually
+$content = Browsershot::make($view)->pdf()->generate();
 Storage::put('file.pdf', $content);
 ```
 
 #### `download(?string $fileName = null): StreamedResponse`
 
-Generates and triggers a browser download.
+Streams the file as a browser download. The correct extension is appended automatically if missing.
 
 ```php
-// Auto-generated filename: arquivo-2025-02-13-143022.pdf
-return Browsershot::make($view)
-    ->format('pdf')
-    ->download();
-
-// Custom filename
-return Browsershot::make($view)
-    ->format('pdf')
-    ->download('invoice-2025.pdf');
-
-// Extension is automatically added if missing
-return Browsershot::make($view)
-    ->format('pdf')
-    ->download('invoice'); // Results in 'invoice.pdf'
+return Browsershot::make($view)->pdf()->download('invoice-2025.pdf');
+return Browsershot::make($view)->pdf()->download('invoice'); // → invoice.pdf
+return Browsershot::make($view)->pdf()->download();          // → document-{timestamp}.pdf
 ```
 
-#### `save(string $path): bool`
+#### `save(string $path, ?string $disk = null): bool`
 
-Saves the generated file to Laravel storage.
+Saves to Laravel's filesystem. Uses the default disk when `$disk` is omitted.
 
 ```php
-// Save to storage/app/invoices/invoice-123.pdf
-Browsershot::make($view)
-    ->format('pdf')
-    ->save('invoices/invoice-123.pdf');
+// Default disk
+Browsershot::make($view)->pdf()->save('invoices/invoice-123.pdf');
 
-// Save to public disk
-Storage::disk('public')->put(
-    'reports/report.pdf',
-    Browsershot::make($view)->format('pdf')->generate()
-);
+// Specific disk
+Browsershot::make($view)->pdf()->save('reports/report.pdf', 'public');
 ```
 
 #### `toBase64(): string`
 
-Returns the generated content as a base64-encoded string.
+Returns the content as a base64-encoded string.
 
 ```php
-$base64 = Browsershot::make($view)
-    ->format('png')
-    ->toBase64();
-
-// Use in HTML
+$base64 = Browsershot::make($view)->png()->toBase64();
 echo "<img src='data:image/png;base64,{$base64}' />";
-
-// Store in database
-$model->screenshot = $base64;
 ```
 
-### Helper Methods
+---
 
-#### `getWindowSize(): array`
+## HTML Structure Handling
 
-Returns the current window dimensions.
+The service automatically wraps partial HTML in a complete document structure:
 
-```php
-$service = Browsershot::make($view)
-    ->windowSize(1920, 1080);
+| Input | Output |
+|---|---|
+| `<h1>Title</h1>` (fragment) | Full document: `DOCTYPE` + `<html>` + `<head>` + `<body>` |
+| `<head>…</head><body>…</body>` | Wraps with `DOCTYPE` + `<html>` |
+| `<body>…</body>` | Adds `DOCTYPE`, `<html>`, and `<head>` |
+| `<!DOCTYPE html><html>…</html>` | Used as-is |
 
-[$width, $height] = $service->getWindowSize();
-// $width = 1920, $height = 1080
-```
+---
 
 ## Advanced Examples
 
-### Complete Invoice PDF Generation
+### A4 Invoice PDF
 
 ```php
-use EduardoRibeiroDev\Browsershot\Facades\Browsershot;
-
 public function generateInvoice(Invoice $invoice)
 {
     return Browsershot::make('invoices.template', [
-        'invoice' => $invoice,
+        'invoice'  => $invoice,
         'customer' => $invoice->customer,
-        'items' => $invoice->items,
+        'items'    => $invoice->items,
     ])
-        ->proportion('21:29.7') // A4 paper ratio
-        ->format('pdf')
+        ->a4()
+        ->margin(15)
+        ->pdf()
         ->download("invoice-{$invoice->number}.pdf");
 }
 ```
@@ -282,46 +385,44 @@ public function generateInvoice(Invoice $invoice)
 public function generateSocialImage(Post $post)
 {
     Browsershot::make(view('social.og-image', compact('post')))
-        ->windowSize(1200, 630) // Open Graph dimensions
-        ->scale(2) // Retina quality
-        ->format('png')
+        ->size(1200, 630) // Open Graph dimensions
+        ->scale(2)        // Retina quality
+        ->png()
         ->save("social/post-{$post->id}.png");
 
     return Storage::url("social/post-{$post->id}.png");
 }
 ```
 
-### Certificate Generation with Custom Styling
+### Certificate with Clip Region
 
 ```php
 public function generateCertificate(User $user, Course $course)
 {
-    $html = view('certificates.template', [
-        'userName' => $user->name,
-        'courseName' => $course->title,
+    return Browsershot::make('certificates.template', [
+        'userName'       => $user->name,
+        'courseName'     => $course->title,
         'completionDate' => now()->format('F d, Y'),
-    ])->render();
-
-    return Browsershot::make($html)
-        ->windowSize(1920, 1357) // Certificate dimensions
+    ])
+        ->size(1920, 1357)
         ->scale(2)
-        ->format('pdf')
+        ->pdf()
         ->download("certificate-{$user->id}-{$course->id}.pdf");
 }
 ```
 
-### Thumbnail Generation from HTML Content
+### Thumbnail as Base64
 
 ```php
 public function generateThumbnail(string $htmlContent)
 {
     $thumbnail = Browsershot::make($htmlContent)
-        ->windowSize(800, 600)
-        ->format('jpg')
+        ->size(800, 600)
+        ->jpeg()
         ->toBase64();
 
     return response()->json([
-        'thumbnail' => "data:image/jpeg;base64,{$thumbnail}"
+        'thumbnail' => "data:image/jpeg;base64,{$thumbnail}",
     ]);
 }
 ```
@@ -329,14 +430,13 @@ public function generateThumbnail(string $htmlContent)
 ### Batch Report Generation
 
 ```php
-use Illuminate\Support\Facades\Storage;
-
 public function generateMonthlyReports(Collection $departments)
 {
     $departments->each(function ($department) {
         Browsershot::make('reports.monthly', compact('department'))
-            ->proportion('16:9')
-            ->format('pdf')
+            ->a4()
+            ->landscape()
+            ->pdf()
             ->save("reports/{$department->slug}-" . now()->format('Y-m') . ".pdf");
     });
 
@@ -344,85 +444,22 @@ public function generateMonthlyReports(Collection $departments)
 }
 ```
 
-### Screenshot with Custom HTML Wrapper
+### Custom Browsershot Options
 
 ```php
-public function captureCustomContent()
+public function captureWithCustomOptions()
 {
-    $customHtml = <<<HTML
-    <head>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Beautiful Screenshot</h1>
-    </body>
-    HTML;
-
-    return Browsershot::make($customHtml)
-        ->windowSize(1920, 1080)
-        ->format('png')
-        ->download('beautiful-screenshot.png');
+    return Browsershot::make('https://example.com')
+        ->size(1920, 1080)
+        ->png()
+        ->modifyBrowsershotUsing(function ($b) {
+            $b->waitUntilNetworkIdle()->timeout(30);
+        })
+        ->download('screenshot.png');
 }
 ```
 
-## HTML Structure Handling
-
-The service automatically wraps your HTML in a complete document structure if needed:
-
-```php
-// Input: '<h1>Title</h1>'
-// Output: Full HTML document with DOCTYPE, html, head, and body tags
-
-// Input: '<body>Content</body>'
-// Output: Adds DOCTYPE, html, and head tags
-
-// Input: '<!DOCTYPE html><html>...</html>'
-// Output: Uses your complete structure as-is
-```
-
-This ensures proper rendering without requiring you to provide complete HTML every time.
-
-## Controller Examples
-
-### RESTful PDF Controller
-
-```php
-<?php
-
-namespace App\Http\Controllers;
-
-use App\Models\Invoice;
-use EduardoRibeiroDev\Browsershot\Facades\Browsershot;
-
-class InvoicePdfController extends Controller
-{
-    public function show(Invoice $invoice)
-    {
-        return Browsershot::make('invoices.pdf', compact('invoice'))
-            ->format('pdf')
-            ->download("invoice-{$invoice->number}.pdf");
-    }
-
-    public function preview(Invoice $invoice)
-    {
-        $base64 = Browsershot::make('invoices.pdf', compact('invoice'))
-            ->format('png')
-            ->windowSize(800, 1131) // A4 preview
-            ->toBase64();
-
-        return view('invoices.preview', compact('base64'));
-    }
-}
-```
+---
 
 ## Testing
 
@@ -434,7 +471,8 @@ test('can generate pdf from view', function () {
     Storage::fake('local');
 
     $result = Browsershot::make('test-view')
-        ->format('pdf')
+        ->a4()
+        ->pdf()
         ->save('test.pdf');
 
     expect($result)->toBeTrue();
@@ -442,16 +480,17 @@ test('can generate pdf from view', function () {
 });
 
 test('can generate high resolution screenshot', function () {
-    $service = Browsershot::make('<h1>Test</h1>')
-        ->windowSize(1920, 1080)
-        ->scale(2);
+    $content = Browsershot::make('<h1>Test</h1>')
+        ->size(1920, 1080)
+        ->scale(2)
+        ->png()
+        ->generate();
 
-    $content = $service->generate();
-
-    expect($content)->toBeString();
-    expect(strlen($content))->toBeGreaterThan(0);
+    expect($content)->toBeString()->not->toBeEmpty();
 });
 ```
+
+---
 
 ## Troubleshooting
 
@@ -464,39 +503,35 @@ sudo apt-get install chromium-browser
 # macOS
 brew install chromium
 
-# Then update .env
+# Update .env accordingly
 BROWSERSHOT_CHROME_PATH=/usr/bin/chromium-browser
 ```
 
 ### Permission Issues in Docker
 
-Add `--no-sandbox` flag:
-
 ```php
-Browsershot::make($view)
-    ->noSandbox()
-    ->generate();
+Browsershot::make($view)->noSandbox()->generate();
 ```
 
 ### Memory Issues with Large PDFs
 
-Increase PHP memory limit in `php.ini` or runtime:
-
 ```php
 ini_set('memory_limit', '512M');
 
-Browsershot::make($largeView)
-    ->format('pdf')
-    ->generate();
+Browsershot::make($largeView)->pdf()->generate();
 ```
+
+---
 
 ## Performance Tips
 
 1. **Cache generated content** when possible
 2. **Use queues** for batch generation
-3. **Optimize Blade views** - minimize CSS/JS complexity
-4. **Set appropriate window sizes** - don't generate larger than needed
-5. **Consider image format** - JPEG is smaller than PNG for photos
+3. **Optimize Blade views** — minimize CSS/JS complexity
+4. **Set appropriate sizes** — don't generate larger than needed
+5. **Choose the right format** — JPEG is smaller than PNG for photographic content
+
+---
 
 ## License
 
