@@ -2,6 +2,7 @@
 
 namespace EduardoRibeiroDev\Browsershot\Services;
 
+use Closure;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Browsershot\Browsershot;
@@ -9,211 +10,406 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BrowsershotService
 {
-    private string $html;
-    private array $windowSize = [1920, 1080];
-    private int $deviceScaleFactor = 1;
-    private string $format = 'png';
+    private ?string $html = null;
+    private ?string $url = null;
+
+    // Configurações Gerais
+    private ?array $size = null;
+    private ?array $center = null;
+    private float $scale = 1;
+    private string $extension = 'png';
     private bool $noSandbox = true;
 
-    /**
-     * Cria uma nova instância do serviço
-     * @param View|string $content Pode ser uma view, string de nome de view, HTML bruto ou URL
-     */
+    // Configurações de PDF
+    private ?bool $landscape = false;
+    private ?array $margins = null;
+    private ?string $pages = null;
+
+    // Callback para manipulação direta
+    private ?Closure $modifyBrowsershotUsing = null;
+
+    private const PX_PER_UNIT = [
+        'px' => 1,
+        'mm' => 3.7795,
+        'cm' => 37.795,
+        'in' => 96,
+    ];
+
+    private const NAMED_SIZES = [
+        'a0'      => [841,  1189],
+        'a1'      => [594,  841],
+        'a2'      => [420,  594],
+        'a3'      => [297,  420],
+        'a4'      => [210,  297],
+        'a5'      => [148,  210],
+        'a6'      => [105,  148],
+        'letter'  => [216,  279],
+        'legal'   => [216,  356],
+        'tabloid' => [279,  432],
+        'ledger'  => [432,  279],
+    ];
+
     public static function make(View|string $content, array $data = []): self
     {
-        $html = null;
+        $instance = new static();
 
         if ($content instanceof View) {
-            $html = $content->render();
-        } else if (view()->exists($content)) {
-            $html = view($content, $data)->render();
-        } else if (filter_var($content, FILTER_VALIDATE_URL)) {
-            $html = file_get_contents($content);
+            $instance->html = $content->render();
+        } elseif (view()->exists($content)) {
+            $instance->html = view($content, $data)->render();
+        } elseif (filter_var($content, FILTER_VALIDATE_URL)) {
+            $instance->url = $content;
         } else {
-            $html = $content;
+            $instance->html = $content;
         }
-
-        $instance = (new static);
-        $instance->html($html);
 
         return $instance;
     }
 
-    /**
-     * Define o HTML a ser renderizado
-     */
-    protected function html(string $html): self
+    public function modifyBrowsershotUsing(Closure $callback): self
     {
-        $this->html = $html;
+        $this->modifyBrowsershotUsing = $callback;
         return $this;
     }
 
-    /**
-     * Envolve o HTML em uma estrutura completa caso necessário
-     */
-    private function getWrappedHtml(): string
+    public function size(int $width, int $height, string $unit = 'px'): self
     {
-        $html = trim($this->html);
-        $lang = str_replace('_', '-', config('app.locale'));
-
-        // Verifica se já possui tag <html>
-        if (preg_match('/<html[\s>]/i', $html)) {
-            return $html;
+        if (!isset(self::PX_PER_UNIT[$unit])) {
+            throw new \InvalidArgumentException("Unidade desconhecida: {$unit}");
         }
 
-        // Verifica se possui <head> mas não <html>
-        $hasHead = preg_match('/<head[\s>]/i', $html);
-        $hasBody = preg_match('/<body[\s>]/i', $html);
+        $pxFactor = self::PX_PER_UNIT[$unit];
+        $this->size = [$width * $pxFactor, $height * $pxFactor];
 
-        // Se já tem head e body, apenas envolve em <html>
-        if ($hasHead && $hasBody) {
-            return "<!DOCTYPE html>\n<html lang=\"{$lang}\">\n{$html}\n</html>";
+        return $this;
+    }
+
+    public function center(int $x, int $y): self
+    {
+        $this->center = [$x, $y];
+        return $this;
+    }
+
+    public function clip(int $x, int $y, int $width, int $height): self
+    {
+        $this->center($x, $y);
+        $this->size($width, $height);
+        return $this;
+    }
+
+    public function scale(float $scale): self
+    {
+        $this->scale = $scale;
+        return $this;
+    }
+
+    public function extension(string $extension): self
+    {
+        $this->extension = strtolower($extension);
+        return $this;
+    }
+
+    public function aspectRatio(string|float $ratio): self
+    {
+        if (!$this->size) {
+            throw new \LogicException("Defina o tamanho antes de configurar a proporção.");
         }
 
-        // Se tem apenas body, adiciona head completo
-        if ($hasBody) {
-            return <<<HTML
-<!DOCTYPE html>
-<html lang="{$lang}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-{$html}
-</html>
-HTML;
+        if (is_string($ratio)) {
+            $parts = explode(':', $ratio);
+            if (count($parts) != 2) {
+                throw new \InvalidArgumentException("Proporção inválida: {$ratio}");
+            }
+            $ratio = (float) $parts[0] / (float) $parts[1];
         }
 
-        [$width, $height] = $this->getWindowSize();
+        [$width, $height] = $this->size;
+        $currentRatio = $width / $height;
 
-        // Se não tem nenhuma estrutura HTML, cria completa
-        return <<<HTML
-<!DOCTYPE html>
-<html lang="{$lang}">
-<head>
-    <meta charset="UTF-8">
-</head>
-<body style="width: {$width}px; height: {$height}px;">
-{$html}
-</body>
-</html>
-HTML;
-    }
+        if ($currentRatio > $ratio) {
+            // Ajusta largura
+            $newWidth = (int) round($height * $ratio);
+            $this->size($newWidth, $height);
+        } else {
+            // Ajusta altura
+            $newHeight = (int) round($width / $ratio);
+            $this->size($width, $newHeight);
+        }
 
-    /**
-     * Define o tamanho da janela
-     */
-    public function windowSize(int $width, int $height): self
-    {
-        $this->windowSize = [$width, $height];
         return $this;
     }
 
-    /**
-     * Define o tamanho baseado em proporção (ex: '16:9')
-     */
-    public function proportion(int $widthRatio, int $heightRatio): self
+    public function format(string $format, float $scale = 1)
     {
-        $baseWidth = $this->windowSize[0];
-        $minDim = min($widthRatio, $heightRatio);
+        $normalizedFormat = strtolower($format);
 
-        $width = intval(($widthRatio / $minDim) * $baseWidth);
-        $height = intval(($heightRatio / $minDim) * $baseWidth);
+        if (!isset(self::NAMED_SIZES[$normalizedFormat])) {
+            throw new \InvalidArgumentException("Formato de papel desconhecido: {$normalizedFormat}");
+        }
 
-        return $this->windowSize($width, $height);
+        $size = array_map(fn($dim) => $dim * $scale, self::NAMED_SIZES[$normalizedFormat]);
+        return $this->size(...$size, unit: 'mm');
     }
 
-    /**
-     * Define o fator de escala do dispositivo
-     */
-    public function scale(int $scale): self
+    public function a0(): self
     {
-        $this->deviceScaleFactor = $scale;
+        return $this->format('A0');
+    }
+    public function a1(): self
+    {
+        return $this->format('A1');
+    }
+    public function a2(): self
+    {
+        return $this->format('A2');
+    }
+    public function a3(): self
+    {
+        return $this->format('A3');
+    }
+    public function a4(): self
+    {
+        return $this->format('A4');
+    }
+    public function a5(): self
+    {
+        return $this->format('A5');
+    }
+    public function a6(): self
+    {
+        return $this->format('A6');
+    }
+    public function letter(): self
+    {
+        return $this->format('Letter');
+    }
+    public function legal(): self
+    {
+        return $this->format('Legal');
+    }
+    public function tabloid(): self
+    {
+        return $this->format('Tabloid');
+    }
+    public function ledger(): self
+    {
+        return $this->format('Ledger');
+    }
+
+    public function jpeg(): self
+    {
+        return $this->extension('jpeg');
+    }
+
+    public function webp(): self
+    {
+        return $this->extension('webp');
+    }
+
+    public function png(): self
+    {
+        return $this->extension('png');
+    }
+
+    public function pdf(): self
+    {
+        return $this->extension('pdf');
+    }
+
+    public function margin(int $size, string $unit = 'mm'): self
+    {
+        return $this->margins($size, $size, $size, $size, $unit);
+    }
+
+    public function marginTop(int $size, string $unit = 'mm'): self
+    {
+        $this->margins['top'] = compact('size', 'unit');
         return $this;
     }
 
-    /**
-     * Define o formato de saída (png, jpg, pdf, etc)
-     */
-    public function format(string $format): self
+    public function marginRight(int $size, string $unit = 'mm'): self
     {
-        $this->format = strtolower($format);
+        $this->margins['right'] = compact('size', 'unit');
         return $this;
     }
 
-    /**
-     * Habilita/desabilita o sandbox
-     */
+    public function marginBottom(int $size, string $unit = 'mm'): self
+    {
+        $this->margins['bottom'] = compact('size', 'unit');
+        return $this;
+    }
+
+    public function marginLeft(int $size, string $unit = 'mm'): self
+    {
+        $this->margins['left'] = compact('size', 'unit');
+        return $this;
+    }
+
+    public function landscape(bool $landscape = true): self
+    {
+        $this->landscape = $landscape;
+        return $this;
+    }
+
+    public function portrait(): self
+    {
+        return $this->landscape(false);
+    }
+
+    public function margins(int $top, int $right, int $bottom, int $left, string $unit = 'mm'): self
+    {
+        $this->margins = compact('top', 'right', 'bottom', 'left', 'unit');
+        return $this;
+    }
+
+    public function pages(...$pages): static
+    {
+        array_walk($pages, function (&$page) {
+            if (is_array($page)) {
+                if (count($page) == 1) {
+                    $page = (string) $page[0];
+                }
+
+                $page = $page[0] . '-' . $page[1];
+            }
+
+            $page = (string) $page;
+        });
+
+        $this->pages = join(',', $pages);
+
+        return $this;
+    }
+
     public function noSandbox(bool $noSandbox = true): self
     {
         $this->noSandbox = $noSandbox;
         return $this;
     }
 
-    /**
-     * Gera o conteúdo (PDF ou Screenshot)
-     */
-    public function generate(): string
+    protected function prepareBrowsershot(): Browsershot
     {
-        $browsershot = Browsershot::html($this->getWrappedHtml())
-            ->windowSize(...$this->windowSize)
-            ->setChromePath(config('services.browsershot.chrome_path'))
-            ->deviceScaleFactor($this->deviceScaleFactor);
+        if ($this->url) {
+            $browsershot = Browsershot::url($this->url);
+        } else {
+            $browsershot = Browsershot::html($this->buildHtml());
+        }
+
+        $browsershot
+            ->setChromePath(config('services.browsershot.chrome_path', '/usr/bin/google-chrome'))
+            ->deviceScaleFactor($this->scale)
+            ->scale($this->scale)
+            ->setScreenshotType($this->extension)
+            ->landscape($this->landscape);
+
+        if ($this->size) {
+            if ($this->center) {
+                $browsershot->clip(...$this->center, ...$this->size);
+            } else {
+                $browsershot->windowSize(...$this->size);
+                $browsershot->paperSize(...$this->size, unit: 'px');
+            }
+        }
 
         if ($this->noSandbox) {
             $browsershot->noSandbox();
         }
 
-        if ($this->format === 'pdf') {
-            return $browsershot->pdf();
+        if ($this->margins) {
+            $browsershot->margins(...array_values($this->margins));
         }
 
-        return $browsershot->format($this->format)->screenshot();
+        if ($this->pages) {
+            $browsershot->pages($this->pages);
+        }
+
+        if ($this->modifyBrowsershotUsing) {
+            call_user_func($this->modifyBrowsershotUsing, $browsershot);
+        }
+
+        return $browsershot;
     }
 
-    /**
-     * Gera e retorna um download direto
-     */
-    public function download(?string $fileName = null): StreamedResponse
+    public function generate(): string
     {
-        if (!$fileName) {
-            $fileName = 'arquivo-' . now()->format('Y-m-d-His') . '.' . $this->format;
-        }
+        $browsershot = $this->prepareBrowsershot();
 
-        if (!str_ends_with($fileName, $this->format)) {
-            $fileName .= '.' . $this->format;
-        }
-
-        $content = $this->generate();
-
-        return response()->streamDownload(function () use ($content) {
-            echo $content;
-        }, $fileName);
+        return match ($this->extension) {
+            'pdf' => $browsershot->pdf(),
+            default => $browsershot->screenshot(),
+        };
     }
 
-    /**
-     * Salva o arquivo no storage
-     */
     public function save(string $path, ?string $disk = null): bool
     {
         $driver = $disk ?? config('filesystems.default', 'local');
-        $content = $this->generate();
-        return Storage::disk($driver)->put($path, $content);
+        return Storage::disk($driver)->put($path, $this->generate());
     }
 
-    /**
-     * Retorna o conteúdo em base64
-     */
+
+    public function download(?string $fileName = null): StreamedResponse
+    {
+        $ext = '.' . $this->extension;
+        $fileName = $fileName ?? 'document-' . now()->timestamp;
+
+        if (!str_ends_with($fileName, $ext)) {
+            $fileName .= $ext;
+        }
+
+        return response()->streamDownload(function () {
+            echo $this->generate();
+        }, $fileName);
+    }
+
     public function toBase64(): string
     {
         return base64_encode($this->generate());
     }
 
-    /**
-     * Retorna as dimensões da janela atual
-     */
-    public function getWindowSize(): array
+    private function buildHtml(): string
     {
-        return $this->windowSize;
+        if ($this->html === null) {
+            throw new \LogicException("No HTML content defined.");
+        }
+
+        $html  = trim($this->html);
+        $lang  = str_replace('_', '-', config('app.locale', 'en'));
+        $lower = strtolower($html);
+
+        if (str_contains($lower, '<html')) {
+            return $html;
+        }
+
+        [$width, $height] = array_map(fn($dim) => $dim / $this->scale, $this->size ?? []);
+
+        if (str_contains($lower, '<head') && str_contains($lower, '<body')) {
+            return "<!DOCTYPE html>\n<html lang=\"{$lang}\">\n{$html}\n</html>";
+        }
+
+        if (str_contains($lower, '<body')) {
+            return <<<HTML
+            <!DOCTYPE html>
+            <html lang="{$lang}">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            {$html}
+            </html>
+            HTML;
+        }
+
+        return <<<HTML
+        <!DOCTYPE html>
+        <html lang="{$lang}">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="width: {$width}px; height: {$height}px; margin: 0;">
+        {$html}
+        </body>
+        </html>
+        HTML;
     }
 }
